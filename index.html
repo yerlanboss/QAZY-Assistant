@@ -189,5 +189,41 @@ function removeMember(id){const m=state.members.find(m=>m.id===id);if(!m||m.role
 document.getElementById('memberForm').addEventListener('submit',e=>{e.preventDefault();const name=document.getElementById('memberName').value.trim(),email=document.getElementById('memberEmail').value.trim().toLowerCase(),role=document.getElementById('memberRole').value;if(state.members.some(m=>m.email.toLowerCase()===email)){alert('Пользователь с таким email уже есть.');return}const m={id:'u-'+Date.now(),name,email,role};state.members.push(m);logAction('Создание пользователя',name+' · '+email+' · '+roleLabel(role));e.target.reset();save()});
 document.getElementById('auditForm').addEventListener('submit',e=>{e.preventDefault();logAction(document.getElementById('auditType').value,document.getElementById('auditDetail').value.trim());document.getElementById('auditDetail').value='';save()});function exportAudit(){const rows=[['Дата','Пользователь','Email','Роль','Действие','Описание'],...state.audit.map(a=>[new Date(a.at).toLocaleString('ru-RU'),a.name,a.email,roleLabel(a.role),a.action,a.details])];const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='qazy-audit-log.csv';a.click();URL.revokeObjectURL(url)}
 document.getElementById('today').textContent=new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'short'});render();
+document.addEventListener('submit',async function(e){
+  if(e.target.id!=='productForm')return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const b=e.target.querySelector('button[type="submit"]');
+  const p={
+    name:document.getElementById('pName').value.trim(),
+    line:document.getElementById('pLine').value,
+    unit:document.getElementById('pUnit').value,
+    pack:document.getElementById('pPack').value.trim()
+  };
+  if(!p.name)return alert('Введи название продукта');
+  b.disabled=true;
+  try{
+    const {data,error}=await qazySupabase.functions.invoke(
+      'qazy-command',{body:{action:'add_product',payload:p}}
+    );
+    if(error)throw error;
+    if(!data?.ok)throw new Error(data?.error||'Ошибка сервера');
+    const {data:r,error:re}=await qazySupabase
+      .from('qazy_workspace_state').select('state')
+      .eq('workspace_id',qazyWorkspace.id).single();
+    if(re)throw re;
+    state.products=r.state.products||[];
+    state.finance=r.state.finance||[];
+    state.done=r.state.done||[];
+    state.audit=r.state.audit||[];
+    state.members=r.state.members||[];
+    localStorage.setItem(STORE,JSON.stringify(state));
+    render();
+    e.target.reset();
+    alert('Продукт сохранён в облаке');
+  }catch(err){
+    alert('Ошибка сохранения: '+err.message);
+  }finally{b.disabled=false;}
+},true);
 cloudInit();
 </script></body></html>
